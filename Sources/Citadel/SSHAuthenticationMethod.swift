@@ -1,3 +1,4 @@
+import Foundation
 import NIO
 import NIOSSH
 import Crypto
@@ -115,6 +116,25 @@ public final class SSHAuthenticationMethod: NIOSSHClientUserAuthenticationDelega
             nextChallengePromise.succeed(NIOSSHUserAuthenticationOffer(username: username, serviceName: "", offer: offer))
         case .custom(let implementation):
             implementation.nextAuthenticationType(availableMethods: availableMethods, nextChallengePromise: nextChallengePromise)
+        }
+    }
+}
+
+public extension SSHAuthenticationMethod {
+    static func fromOpenSSHPrivateKey(
+        username: String,
+        keyString: String,
+        passphrase: Data? = nil
+    ) throws -> SSHAuthenticationMethod {
+        let keyType = try SSHKeyDetection.detectPrivateKeyType(from: keyString)
+        if keyType == .rsa {
+            let key = try OpenSSH.PrivateKey<Insecure.RSA.PrivateKey>(string: keyString, decryptionKey: passphrase)
+            return .rsa(username: username, privateKey: key.privateKey)
+        } else if keyType == .ed25519 {
+            let key = try OpenSSH.PrivateKey<Curve25519.Signing.PrivateKey>(string: keyString, decryptionKey: passphrase)
+            return .ed25519(username: username, privateKey: key.privateKey)
+        } else {
+            throw SSHKeyDetectionError.unsupportedKeyType(type: keyType.rawValue)
         }
     }
 }
